@@ -1,2 +1,3 @@
-# compactacao-de-sinais
-Code for signal/data compression
+# Compactação de Sinais
+
+Code for signal/data compression.
