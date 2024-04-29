@@ -29,7 +29,7 @@ class CompressBase(ABC):
         """
 
     @abstractmethod
-    def compress(self, X: np.ndarray):
+    def compress(self):
         """Method to compress data set using trained model.
         
         Parameters
@@ -46,7 +46,7 @@ class CompressBase(ABC):
         """
 
     @abstractmethod
-    def decompress(self, T:np.ndarray):
+    def decompress(self):
         """Method to decompress data set using trained model.
         
         Parameters
