@@ -236,9 +236,11 @@ class PrincipalCurve:
         s_interp = np.zeros(X.shape[0])
         # Computation:
         d_sq_old = np.Inf
-        for _ in range(0, max_iter):
+        for it in range(0, max_iter):
             # Calculate distances
+            print(it)
             s_interp, p_interp, d_sq = self.project(X, p, s)
+            print(np.abs(d_sq - d_sq_old))
             if np.abs(d_sq - d_sq_old) < tol:
                 break
             d_sq_old = d_sq
