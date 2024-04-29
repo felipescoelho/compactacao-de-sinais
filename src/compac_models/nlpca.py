@@ -66,7 +66,7 @@ class NLPCA(CompressBase):
             hp_latent_variables = hp.Int(name='number_latent', min_value=1,
                                             max_value=self.max_latent)
             hp_learning_rate = hp.Choice('learning_rate',
-                                            values=[1e-2, 1e-3, 1e-4])
+                                         values=[1e-2, 1e-3, 1e-4])
             nl_h1 = kr.layers.Dense(units=hp_nonlinear_units,
                                     activation='sigmoid')(input_layer)
             lin_lat = kr.layers.Dense(units=hp_latent_variables,
@@ -159,7 +159,8 @@ class PrincipalCurve:
         @param X: data
         @param p: curve points
         @param s: curve parameterisation
-        @returns: interpolating parameter values, projected points on curve, sum of square distances
+        @returns: interpolating parameter values, projected points on
+        curve, sum of square distances
         '''
         s_interp = np.zeros(X.shape[0])  # Interpolating Parameters
         p_interp = np.zeros(X.shape)  # Projected Points
@@ -171,12 +172,12 @@ class PrincipalCurve:
             seg_proj = (((p[1:] - p[0:-1]).T)
                         * np.einsum('ij,ij->i', z - p[0:-1], p[1:] - p[0:-1])
                         / np.power(np.linalg.norm(p[1:] - p[0:-1],
-                                                  axis = 1), 2)).T
+                                                  axis=1), 2)).T
             # Perpendicular Component
-            proj_dist = (z - p[0:-1]) - seg_proj 
-            dist_endpts = np.minimum(np.linalg.norm(z - p[0:-1], axis = 1),
-                                     np.linalg.norm(z - p[1:], axis = 1))
-            dist_seg = np.maximum(np.linalg.norm(proj_dist, axis = 1),
+            proj_dist = (z - p[0:-1]) - seg_proj
+            dist_endpts = np.minimum(np.linalg.norm(z - p[0:-1], axis=1),
+                                     np.linalg.norm(z - p[1:], axis=1))
+            dist_seg = np.maximum(np.linalg.norm(proj_dist, axis=1),
                                   dist_endpts)
             idx_min = np.argmin(dist_seg)
             q = seg_proj[idx_min]
@@ -185,8 +186,8 @@ class PrincipalCurve:
                 * (s[idx_min+1]-s[idx_min]) + s[idx_min]
             p_interp[i] = (s_interp[i] - s[idx_min]) \
                 * (p[idx_min+1, :] - p[idx_min, :]) + p[idx_min, :]
-            d_sq = d_sq + np.linalg.norm(proj_dist[idx_min])**2
-            
+            d_sq += np.linalg.norm(proj_dist[idx_min])**2
+
         return s_interp, p_interp, d_sq
     
     @staticmethod
@@ -200,6 +201,7 @@ class PrincipalCurve:
         s = np.zeros(p.shape[0])
         s[1:] = np.cumsum(seg_lens)
         s = s/sum(seg_lens)
+
         return s
     
     def __init__(self, k = 3):
@@ -225,7 +227,8 @@ class PrincipalCurve:
         pc1 = pca.components_[:, 0]
         if p is None:
             p = np.kron(np.dot(X, pc1)/np.dot(pc1, pc1), pc1).reshape(X.shape)
-            order = np.argsort([np.linalg.norm(p[0, :] - p[i, :]) for i in range(0, p.shape[0])])
+            order = np.argsort([np.linalg.norm(p[0, :] - p[i, :]) 
+                                for i in range(0, p.shape[0])])
             p = p[order]
         s = self.renorm_parameterisation(p)
         # Memory allocation:
@@ -234,15 +237,18 @@ class PrincipalCurve:
         # Computation:
         d_sq_old = np.Inf
         for _ in range(0, max_iter):
+            # Calculate distances
             s_interp, p_interp, d_sq = self.project(X, p, s)
             if np.abs(d_sq - d_sq_old) < tol:
                 break
             d_sq_old = d_sq
             order = np.argsort(s_interp)
+            # Family of curves
             spline = [
                 UnivariateSpline(s_interp[order], X[order, j], k=self.k, w=w)
                 for j in range(0, X.shape[1])
             ]
+            # Gen projections by curves
             p = np.zeros((len(s_interp), X.shape[1]))
             for j in range(0, X.shape[1]):
                 p[:, j] = spline[j](s_interp[order])
