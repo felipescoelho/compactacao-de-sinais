@@ -11,6 +11,7 @@ Mar 20, 2024
 import numpy as np
 from scipy.integrate import quad, dblquad
 from scipy.linalg import toeplitz, sqrtm
+from multiprocessing import cpu_count, Pool
 
 
 def calc_K_factor(d_lk: float) -> float:
@@ -124,6 +125,67 @@ def corr_mat_local_scatter(N: int, angle_varphi: float, angle_theta: float,
     return R
 
 
+def single_run(data: tuple):
+    """Method to generate a single realization of the setup."""
+
+    # Get stup data
+    setup_info, AP_info, seed = data
+    area_len, antenna_spacing, sigma_sf_los, noise_var, alpha, \
+        constant_term, decorr_distance, height, N, L, K = setup_info
+    wrapped_AP_locations, wrap_locations, sigma_varphi, sigma_theta = AP_info
+    # Random number generator
+    rng = np.random.default_rng(seed=seed)
+
+    # Memory allocation for UEs
+    UEs_position = np.zeros((K, 1), dtype=np.complex128)
+    R_shadow = sigma_sf_los**2 * np.ones((K, K), dtype=np.float64)
+    shadow_realizations_AP = np.zeros((K, L), dtype=np.float64)
+    beta = np.zeros((L, K), dtype=np.complex128)
+    dist = np.zeros((L, K), dtype=np.float64)
+    R = np.zeros((N, N, L, K), dtype=np.complex128)
+    for k in range(K):
+        UE_position = area_len * (rng.standard_normal((1,))
+                                  + 1j*rng.standard_normal((1,)))
+        dist_mat = np.abs(wrapped_AP_locations - UE_position)
+        dist_APs_UE = np.min(dist_mat, axis=1)
+        idx_position = np.argmin(dist_mat, axis=1)
+        dist[:, k] = np.sqrt(height**2 + dist_APs_UE**2)
+        if k > 0:
+            # See: S. Kay "Fundamental of Statistical Signal Processing:
+            # Estimation Theory" -- Theorem 10.2 on shadow fading
+            # realizations when previous UEs shadow fading realization have
+            # already been computed.
+            shortest_dists = np.zeros((k,), dtype=np.float64)
+            for i in range(k):
+                shortest_dists[i] = np.min(np.abs(
+                    UE_position - UEs_position[i] + wrap_locations
+                ))
+            new_col = sigma_sf_los**2*2**(-shortest_dists/decorr_distance)
+            spam = new_col.T @ np.linalg.pinv(R_shadow[:k, :k])
+            mean_values = spam @ shadow_realizations_AP[:k, :]
+            std_val = np.sqrt(sigma_sf_los**2 - np.dot(spam, new_col))
+            R_shadow[:k, k] = new_col
+            R_shadow[k, :k] = new_col
+            shadowing = mean_values + std_val*rng.standard_normal((L,))
+        else:
+            shadowing = sigma_sf_los*rng.standard_normal((L,))
+        beta[:, k] = constant_term - alpha*np.log10(dist[:, k]) + shadowing \
+            - noise_var
+        shadow_realizations_AP[k, :] = shadowing
+        UEs_position[k] = UE_position
+        for l in range(L):
+            angle_varphi = np.angle(
+                UEs_position[k]-wrapped_AP_locations[l, idx_position[l]]
+            )
+            angle_theta = np.arcsin(height/dist[l, k])
+            R[:, :, l, k] = 10**(beta[l, k]/10) * corr_mat_local_scatter(
+                N, angle_varphi, angle_theta, sigma_varphi, sigma_theta,
+                antenna_spacing
+            )
+    
+    return R, dist
+
+
 def gen_AP_UE_statistics(L: int, N: int, K: int, sigma_varphi: float,
                          sigma_theta: float, ensemble: int, seed=42) -> tuple:
     """Method to estimate some channel statistics based of code from
@@ -178,68 +240,31 @@ def gen_AP_UE_statistics(L: int, N: int, K: int, sigma_varphi: float,
     constant_term = -30.5
     decorr_distance = 9  # Minimal distance for correlated shadow fading
     height = 10  # Distance between AP and UE in the vertical axis
-
-    beta = np.zeros((L, K, ensemble), dtype=np.complex128)
-    R = np.zeros((N, N, L, K, ensemble), dtype=np.complex128)
-    dist = np.zeros((L, K, ensemble), dtype=np.float64)
-    D = np.zeros((L, K, ensemble), dtype=np.float64)
+    
     # Calculation:
     spam = np.tile(np.array((-area_len, 0, area_len)), (3, 1))
     wrap_locations = spam.T.flatten() + 1j*spam.flatten()
     rng = np.random.default_rng(seed=seed)
-    for it in range(ensemble):
-        if it == 0:
-            # Randomized position for APs
-            APs_position = area_len * (rng.standard_normal((L,))
-                                    + 1j*rng.standard_normal((L,)))
-            wrapped_AP_locations = np.tile(APs_position, (9, 1)).T \
-                + np.tile(wrap_locations, (L, 1))
-        # Memory allocation for UEs
-        UEs_position = np.zeros((K, 1), dtype=np.complex128)
-        R_shadow = sigma_sf_los**2 * np.ones((K, K), dtype=np.float64)
-        shadow_realizations_AP = np.zeros((K, L), dtype=np.float64)
-        for k in range(K):
-            UE_position = area_len * (rng.standard_normal((1,)) + 1j*rng.standard_normal((1,)))
-            dist_mat = np.abs(wrapped_AP_locations - UE_position)
-            dist_APs_UE = np.min(dist_mat, axis=1)
-            idx_position = np.argmin(dist_mat, axis=1)
-            dist[:, k, it] = np.sqrt(height**2 + dist_APs_UE**2)
-            if k > 0:
-                # See: S. Kay "Fundamental of Statistical Signal Processing:
-                # Estimation Theory" -- Theorem 10.2 on shadow fading
-                # realizations when previous UEs shadow fading realization have
-                # already been computed.
-                shortest_dists = np.zeros((k,), dtype=np.float64)
-                for i in range(k):
-                    shortest_dists[i] = np.min(np.abs(
-                        UE_position - UEs_position[i] + wrap_locations
-                    ))
-                new_col = sigma_sf_los**2*2**(-shortest_dists/decorr_distance)
-                spam = new_col.T @ np.linalg.pinv(R_shadow[:k, :k])
-                mean_values = spam @ shadow_realizations_AP[:k, :]
-                std_val = np.sqrt(sigma_sf_los**2 - np.dot(spam, new_col))
-                R_shadow[:k, k] = new_col
-                R_shadow[k, :k] = new_col
-                shadowing = mean_values + std_val*rng.standard_normal((L,))
-            else:
-                shadowing = sigma_sf_los*rng.standard_normal((L,))
-            beta[:, k, it] = constant_term - alpha*np.log10(dist[:, k, it]) \
-                + shadowing - noise_var
-            shadow_realizations_AP[k, :] = shadowing
-            UEs_position[k] = UE_position
-            master_idx = np.argmax(beta[:, k, it])
-            D[master_idx, k, it] = 1
-            for l in range(L):
-                angle_varphi = np.angle(
-                    UEs_position[k]-wrapped_AP_locations[l, idx_position[l]]
-                )
-                angle_theta = np.arcsin(height/dist[l, k, it])
-                R[:, :, l, k, it] = 10**(beta[l, k, it]/10) \
-                    * corr_mat_local_scatter(N, angle_varphi, angle_theta,
-                                             sigma_varphi, sigma_theta,
-                                             antenna_spacing)
+    # Randomized position for APs
+    APs_position = area_len * (rng.standard_normal((L,))
+                               + 1j*rng.standard_normal((L,)))
+    wrapped_AP_locations = np.tile(APs_position, (9, 1)).T \
+        + np.tile(wrap_locations, (L, 1))
+    setup_info = (area_len, antenna_spacing, sigma_sf_los, noise_var, alpha,
+                  constant_term, decorr_distance, height, N, L, K)
+    AP_info = (wrapped_AP_locations, wrap_locations, sigma_varphi, sigma_theta)
+    data_list = [(setup_info, AP_info, rng.integers(99999999))
+                 for _ in range(ensemble)]
+
+    with Pool(cpu_count()) as pool:
+        results = pool.map(single_run, data_list)
     
-    return R, D
+    R = np.zeros((N, N, L, K, ensemble), dtype=np.complex128)
+    dist = np.zeros((L, K, ensemble), dtype=np.complex128)
+    for it in range(ensemble):
+        R[:, :, :, :, it], dist[:, :, it] = results[it]
+    
+    return R, dist
 
 
 def gen_channels(L: int, K: int, N: int, R: np.ndarray, ensemble: int,
