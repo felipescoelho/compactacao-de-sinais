@@ -9,7 +9,7 @@ Mar 20, 2024
 
 
 import numpy as np
-from scipy.integrate import quad, dblquad
+from scipy.integrate import quad, dblquad, quad_vec
 from scipy.linalg import toeplitz, sqrtm
 
 
@@ -94,10 +94,21 @@ def corr_mat_local_scatter(N: int, angle_varphi: float, angle_theta: float,
             )/(np.sqrt(2*np.pi)*sigma_varphi) * np.exp(
                 -epsilon**2/(2*sigma_theta**2)
             )/(np.sqrt(2*np.pi)*sigma_theta)).imag
-            r_comp, _ = dblquad(f_real, -sigma_varphi, sigma_varphi,
-                                lambda x: -sigma_theta, lambda x: sigma_theta)
-            i_comp, _ = dblquad(f_img, -sigma_varphi, sigma_varphi,
-                                lambda x: -sigma_theta, lambda x: sigma_theta)
+            r_comp = quad_vec(
+                lambda delta: quad_vec(
+                    lambda epsilon: f_real(delta, epsilon), -20*sigma_varphi,
+                    20*sigma_varphi
+                )[0], -20*sigma_theta, 20*sigma_theta)[0]
+            i_comp = quad_vec(
+                lambda delta: quad_vec(
+                    lambda epsilon: f_img(delta, epsilon), -20*sigma_varphi,
+                    20*sigma_varphi
+                )[0], -20*sigma_theta, 20*sigma_theta
+            )[0]
+            # r_comp, _ = dblquad(f_real, -sigma_varphi, sigma_varphi,
+            #                     lambda x: -sigma_theta, lambda x: sigma_theta)
+            # i_comp, _ = dblquad(f_img, -sigma_varphi, sigma_varphi,
+            #                     lambda x: -sigma_theta, lambda x: sigma_theta)
             col[n] =  r_comp + 1j*i_comp
         elif sigma_varphi > 0:
             f = lambda delta: np.exp(

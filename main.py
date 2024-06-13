@@ -26,7 +26,7 @@ def arg_parser() -> argparse.Namespace:
     parser.add_argument('-K', '--num_ue', type=int,
                         help='Number of User Equipments', default=16)
     parser.add_argument('--ensemble', type=int,
-                        help='Number of experiments', default=100)
+                        help='Number of experiments', default=10)
     args = parser.parse_args()
 
     return args
