@@ -1,4 +1,6 @@
-references/
 __pycache__/
+references/
+others/
+figs/
 *.json
 *.h5

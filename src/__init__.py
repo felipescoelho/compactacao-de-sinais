@@ -7,7 +7,7 @@ Abr 26, 2024
 """
 
 
-__all__ = ['NLPCA', 'PrincipalCurve']
+__all__ = ['NLPCA']
 
 
-from .compac_models import NLPCA, PrincipalCurve
+from .compac_models import NLPCA

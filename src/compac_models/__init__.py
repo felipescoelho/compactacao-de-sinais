@@ -7,7 +7,8 @@ Abr 26, 2024
 """
 
 
-__all__ = ['NLPCA', 'PrincipalCurve']
+__all__ = ['NLPCA', 'ICA']
 
 
-from .nlpca import NLPCA, PrincipalCurve
+from .nlpca import NLPCA
+from .ica import ICA
