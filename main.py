@@ -41,8 +41,8 @@ if __name__ == '__main__':
                                     5, 5, args.ensemble)
         H = gen_channels(args.num_ap, args.num_ue, args.num_antennas, R,
                          args.ensemble)
-        np.save('correlation_mat.npy', R)
-        np.save('channel_mat.npy', H)
-        np.save('position_mat.npy', D)
+        np.save('correlation2_mat.npy', R)
+        np.save('channel2_mat.npy', H)
+        np.save('position2_mat.npy', D)
     elif args.mode == 'run_experiment':
         pass
