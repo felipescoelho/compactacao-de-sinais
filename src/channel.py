@@ -157,15 +157,15 @@ def corr_mat_local_scatter(N: int, angle_varphi: float, angle_theta: float,
             )/(np.sqrt(2*np.pi)*sigma_theta)).imag
             r_comp = quad_vec(
                 lambda delta: quad_vec(
-                    lambda epsilon: f_real(delta, epsilon), -20*sigma_varphi,
-                    20*sigma_varphi
-                )[0], -20*sigma_theta, 20*sigma_theta
+                    lambda epsilon: f_real(delta, epsilon), -sigma_varphi,
+                    sigma_varphi
+                )[0], -sigma_theta, sigma_theta
             )[0]
             i_comp = quad_vec(
                 lambda delta: quad_vec(
-                    lambda epsilon: f_img(delta, epsilon), -20*sigma_varphi,
-                    20*sigma_varphi
-                )[0], -20*sigma_theta, 20*sigma_theta
+                    lambda epsilon: f_img(delta, epsilon), -sigma_varphi,
+                    sigma_varphi
+                )[0], -sigma_theta, sigma_theta
             )[0]
             # r_comp, _ = dblquad(f_real, -sigma_varphi, sigma_varphi,
             #                     lambda x: -sigma_theta, lambda x: sigma_theta)
