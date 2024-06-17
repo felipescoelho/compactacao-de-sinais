@@ -201,6 +201,17 @@ def corr_mat_local_scatter(N: int, angle_varphi: float, angle_theta: float,
     return R
 
 
+def multiprocessing_worker(data_in):
+    """"""
+    l, N, sigma_varphi, sigma_theta, antenna_spacing, angle_varphi, \
+        angle_theta, beta_lk = data_in
+    R = beta_lk*corr_mat_local_scatter(N, angle_varphi, angle_theta,
+                                       sigma_varphi, sigma_theta,
+                                       antenna_spacing)
+    
+    return (l, R)
+
+
 def single_run(data: tuple):
     """Method to generate a single realization of the setup."""
 
@@ -249,15 +260,26 @@ def single_run(data: tuple):
             - noise_var
         shadow_realizations_AP[k, :] = shadowing
         UEs_position[k] = UE_position
-        for l in range(L):
-            angle_varphi = np.angle(
-                UEs_position[k]-wrapped_AP_locations[l, idx_position[l]]
-            )
-            angle_theta = np.arcsin(height/dist[l, k])
-            R[:, :, l, k] = 10**(beta[l, k]/10) * corr_mat_local_scatter(
-                N, angle_varphi, angle_theta, sigma_varphi, sigma_theta,
-                antenna_spacing
-            )
+        data_in = [
+            (l, N, sigma_varphi, sigma_theta, antenna_spacing,
+             np.angle(UEs_position[k]-wrapped_AP_locations[l, idx_position[l]]),
+             np.arcsin(height/dist[l, k]), 10**(beta[l, k]/10))
+            for l in range(L)
+        ]
+        with Pool(cpu_count()) as pool:
+            result_list = pool.map(multiprocessing_worker, data_in)
+        for idx in range(L):
+            l, R_lk = result_list[idx]
+            R[:, :, l, k] = R_lk
+        # for l in range(L):
+        #     angle_varphi = np.angle(
+        #         UEs_position[k]-wrapped_AP_locations[l, idx_position[l]]
+        #     )
+        #     angle_theta = np.arcsin(height/dist[l, k])
+        #     R[:, :, l, k] = 10**(beta[l, k]/10) * corr_mat_local_scatter(
+        #         N, angle_varphi, angle_theta, sigma_varphi, sigma_theta,
+        #         antenna_spacing
+        #     )
     
     return R, dist
 
