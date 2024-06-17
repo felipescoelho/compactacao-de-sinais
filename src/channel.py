@@ -12,6 +12,7 @@ import numpy as np
 from scipy.integrate import quad, dblquad, quad_vec
 from scipy.linalg import toeplitz, sqrtm
 from multiprocessing import cpu_count, Pool
+from tqdm import tqdm
 
 
 def calc_K_factor(d_lk: float) -> float:
@@ -41,6 +42,65 @@ def calc_K_factor(d_lk: float) -> float:
     K_lk = 10**(1.3 - .003*d_lk)
 
     return K_lk
+
+
+def real_fun(epsilon, delta, dist, angle_varphi, angle_theta, sigma_varphi,
+                sigma_theta):
+    """"""
+    return (np.exp(
+        1j*2*np.pi*dist*np.sin(angle_varphi+delta)*np.cos(angle_theta+epsilon)
+    )*np.exp(
+        -delta**2/(2*sigma_varphi**2)
+    )/(np.sqrt(2*np.pi)*sigma_varphi)*np.exp(
+        -epsilon**2/(2*sigma_theta**2)
+    )/(np.sqrt(2*np.pi)*sigma_theta)).real
+
+
+def quick_int_double_var_real(dist, angle_varphi, angle_theta, sigma_varphi,
+                              sigma_theta):
+    """"""
+    args = (dist, angle_varphi, angle_theta, sigma_varphi, sigma_theta)
+
+    return quad_vec(quick_int_single_var_real, -20*sigma_theta, 20*sigma_theta,
+                    args=(*args,))
+
+
+def quick_int_single_var_real(delta, dist, angle_varphi, angle_theta,
+                              sigma_varphi, sigma_theta):
+    """"""
+    args = (delta, dist, angle_varphi, angle_theta, sigma_varphi, sigma_theta)
+
+    return quad_vec(real_fun, -20*sigma_varphi, 20*sigma_varphi, args=(*args,))
+
+
+def imaginary_fun(epsilon, delta, dist, angle_varphi, angle_theta,
+                  sigma_varphi, sigma_theta):
+    """"""
+    return (np.exp(
+        1j*2*np.pi*dist*np.sin(angle_varphi+delta)*np.cos(angle_theta+epsilon)
+    )*np.exp(
+        -delta**2/(2*sigma_varphi**2)
+    )/(np.sqrt(2*np.pi)*sigma_varphi)*np.exp(
+        -epsilon**2/(2*sigma_theta**2)
+    )/(np.sqrt(2*np.pi)*sigma_theta)).imag
+
+
+def quick_int_double_var_imag(dist, angle_varphi, angle_theta, sigma_varphi,
+                              sigma_theta):
+    """"""
+    args = (dist, angle_varphi, angle_theta, sigma_varphi, sigma_theta)
+
+    return quad_vec(quick_int_single_var_imag, -20*sigma_theta, 20*sigma_theta,
+                    args=(*args,), workers=-1)
+
+
+def quick_int_single_var_imag(delta, dist, angle_varphi, angle_theta,
+                              sigma_varphi, sigma_theta):
+    """"""
+    args = (delta, dist, angle_varphi, angle_theta, sigma_varphi, sigma_theta)
+
+    return quad_vec(imaginary_fun, -20*sigma_varphi, 20*sigma_varphi,
+                    args=(*args,), workers=-1)
 
 
 def corr_mat_local_scatter(N: int, angle_varphi: float, angle_theta: float,
@@ -99,7 +159,8 @@ def corr_mat_local_scatter(N: int, angle_varphi: float, angle_theta: float,
                 lambda delta: quad_vec(
                     lambda epsilon: f_real(delta, epsilon), -20*sigma_varphi,
                     20*sigma_varphi
-                )[0], -20*sigma_theta, 20*sigma_theta)[0]
+                )[0], -20*sigma_theta, 20*sigma_theta
+            )[0]
             i_comp = quad_vec(
                 lambda delta: quad_vec(
                     lambda epsilon: f_img(delta, epsilon), -20*sigma_varphi,
@@ -111,6 +172,10 @@ def corr_mat_local_scatter(N: int, angle_varphi: float, angle_theta: float,
             # i_comp, _ = dblquad(f_img, -sigma_varphi, sigma_varphi,
             #                     lambda x: -sigma_theta, lambda x: sigma_theta)
             col[n] =  r_comp + 1j*i_comp
+            # col[n] = quick_int_double_var_real(dist, angle_varphi, angle_theta,
+            #                                    sigma_varphi, sigma_theta) \
+            #     + 1j*quick_int_double_var_imag(dist, angle_varphi, angle_theta,
+            #                                    sigma_varphi, sigma_theta)
         elif sigma_varphi > 0:
             f = lambda delta: np.exp(
                 1j*2*np.pi*dist*np.sin(angle_varphi+delta)*np.cos(angle_theta)
@@ -154,7 +219,7 @@ def single_run(data: tuple):
     beta = np.zeros((L, K), dtype=np.complex128)
     dist = np.zeros((L, K), dtype=np.float64)
     R = np.zeros((N, N, L, K), dtype=np.complex128)
-    for k in range(K):
+    for k in tqdm(range(K)):
         UE_position = area_len * (rng.standard_normal((1,))
                                   + 1j*rng.standard_normal((1,)))
         dist_mat = np.abs(wrapped_AP_locations - UE_position)
@@ -266,14 +331,16 @@ def gen_AP_UE_statistics(L: int, N: int, K: int, sigma_varphi: float,
     AP_info = (wrapped_AP_locations, wrap_locations, sigma_varphi, sigma_theta)
     data_list = [(setup_info, AP_info, rng.integers(99999999))
                  for _ in range(ensemble)]
-
-    with Pool(cpu_count()) as pool:
-        results = pool.map(single_run, data_list)
-    
-    R = np.zeros((N, N, L, K, ensemble), dtype=np.complex128)
-    dist = np.zeros((L, K, ensemble), dtype=np.complex128)
-    for it in range(ensemble):
-        R[:, :, :, :, it], dist[:, :, it] = results[it]
+    if ensemble > 1:
+        with Pool(cpu_count()) as pool:
+            results = pool.map(single_run, data_list)
+        
+        R = np.zeros((N, N, L, K, ensemble), dtype=np.complex128)
+        dist = np.zeros((L, K, ensemble), dtype=np.complex128)
+        for it in range(ensemble):
+            R[:, :, :, :, it], dist[:, :, it] = results[it]
+    else:
+        R, dist = single_run(*data_list)
     
     return R, dist
 

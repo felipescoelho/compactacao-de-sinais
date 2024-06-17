@@ -22,11 +22,11 @@ def arg_parser() -> argparse.Namespace:
     parser.add_argument('-L', '--num_ap', type=int,
                         help='Number of Access Points (AP)', default=25)
     parser.add_argument('-N', '--num_antennas', type=int,
-                        help='Number of antennas in each AP', default=20)
+                        help='Number of antennas in each AP', default=10)
     parser.add_argument('-K', '--num_ue', type=int,
                         help='Number of User Equipments', default=16)
     parser.add_argument('--ensemble', type=int,
-                        help='Number of experiments', default=10)
+                        help='Number of experiments', default=1)
     args = parser.parse_args()
 
     return args
