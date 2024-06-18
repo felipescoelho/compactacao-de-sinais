@@ -367,24 +367,23 @@ def gen_AP_UE_statistics(L: int, N: int, K: int, sigma_varphi: float,
     return R, dist
 
 
-def gen_channels(L: int, K: int, N: int, R: np.ndarray, ensemble: int,
-                 seed=42):
+def parallel_worker_chann_gen(data_in):
+    """"""
+    
+
+
+def gen_channels(R: np.ndarray, num_chan: int, seed=42):
     """
     Method to generate channel realizations for all UEs in the network.
     
     Parameters
     ----------
-    L : int
-        Number of Access Points (APs).
-    K : int
-        Number of User Equipments (UEs) in the network.
-    N : int
-        Number of antennas per AP.
     R : np.ndarray
         Array with the spacial correlation between APs and UEs,
         normalized by noise variance.
-    ensemble : int
+    num_chan : int
         Number of channel realizations.
+    seed : int
 
     Return
     ------
@@ -395,13 +394,15 @@ def gen_channels(L: int, K: int, N: int, R: np.ndarray, ensemble: int,
 
     # Rayleigh fading channel
     rng = np.random.default_rng(seed=seed)
-    H = rng.standard_normal((L*N, ensemble, K)) \
-        + 1j*rng.standard_normal((L*N, ensemble, K))
+    N, _, L, K = R.shape
+
+    H = rng.standard_normal((L*N, num_chan, K)) \
+            + 1j*rng.standard_normal((L*N, num_chan, K))
     
-    for it in range(ensemble):
+    for it in range(num_chan):
         for l in range(L):
             for k in range(K):
-                H[l*N:(l+1)*N, it, k] = np.sqrt(.5)*sqrtm(R[:, :, l, k, it]) \
+                H[l*N:(l+1)*N, it, k] = np.sqrt(.5)*sqrtm(R[:, :, l, k]) \
                     @ H[l*N:(l+1)*N, it, k]
     
     return H

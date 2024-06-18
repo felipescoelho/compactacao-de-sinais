@@ -15,7 +15,7 @@ from .base import CompressBase
 class ICA(CompressBase):
     """A class for ICA model."""
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs):
         """
         ICA Model
         
